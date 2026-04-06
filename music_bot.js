@@ -9,7 +9,7 @@ const path = require('path');
 // =====================
 // CONFIGURATION
 // =====================
-const TOKEN = '8558218893:AAErp9eYr338v-h5i_50N7ZV83j09vQgTAA';
+const TOKEN = 'Enter your token here';
 const ADMIN_PASSWORD = 'jaat123';
 
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
