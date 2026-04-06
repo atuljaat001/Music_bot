@@ -1,0 +1,314 @@
+// =====================
+// IMPORTS
+// =====================
+const TelegramBot = require('node-telegram-bot-api');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+
+// =====================
+// CONFIGURATION
+// =====================
+const TOKEN = '8558218893:AAErp9eYr338v-h5i_50N7ZV83j09vQgTAA';
+const ADMIN_PASSWORD = 'jaat123';
+
+const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
+const LOG_FILE = path.join(__dirname, 'downloads.log');
+
+const authorizedUsers = new Set();
+
+
+// =====================
+// INITIAL SETUP
+// =====================
+if (!fs.existsSync(DOWNLOAD_DIR)) {
+  fs.mkdirSync(DOWNLOAD_DIR);
+}
+
+const bot = new TelegramBot(TOKEN, { polling: true });
+
+
+// =====================
+// AUTHORIZATION
+// =====================
+bot.onText(/\/auth (.+)/, (msg, match) => {
+  if (match[1] === ADMIN_PASSWORD) {
+    authorizedUsers.add(msg.from.id);
+    bot.sendMessage(msg.chat.id, '✅ Authorization successful.');
+  } else {
+    bot.sendMessage(msg.chat.id, '❌ Wrong password.');
+  }
+});
+
+
+// =====================
+// PLAY COMMAND (SEARCH & OPTIONS)
+// =====================
+/*
+bot.onText(/\/play (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const query = match[1];
+
+  const yt = spawn('yt-dlp', [
+    `ytsearch5:${query}`,
+    '--print', '%(title)s|%(id)s',
+    '--skip-download'
+  ]);
+
+  let results = [];
+
+  yt.stdout.on('data', (data) => {
+    data.toString().split('\n').forEach(line => {
+      const [title, id] = line.split('|');
+      if (title && id) {
+        results.push({ title, id });
+      }
+    });
+  });
+
+  yt.on('close', () => {
+    if (!results.length) {
+      return bot.sendMessage(chatId, '❌ No results found.');
+    }
+
+    const buttons = results.slice(0, 5).map((r, i) => ([
+      {
+        text: `${i + 1}. ${r.title.substring(0, 45)}`,
+        callback_data: `download_${r.id}`
+      }
+    ]));
+
+    bot.sendMessage(chatId, '🎵 Select the correct song:', {
+      reply_markup: { inline_keyboard: buttons }
+    });
+  });
+});
+
+
+// =====================
+// HANDLE SONG SELECTION
+// =====================
+/*
+bot.on('callback_query', async (query) => {
+  const chatId = query.message.chat.id;
+
+  if (!query.data.startsWith('download_')) return;
+
+  const videoId = query.data.replace('download_', '');
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+  const username =
+    query.from.username ||
+    query.from.first_name ||
+    'unknown_user';
+
+  const time = new Date().toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour12: false
+  });
+
+  fs.appendFileSync(LOG_FILE, `${time} | ${username} | ${videoId}\n`);
+
+  const progressMsg = await bot.sendMessage(chatId, '⬇️ Downloading… 0%');
+  const progressMsgId = progressMsg.message_id;
+
+  const yt = spawn('yt-dlp', [
+    '-x',
+    '--audio-format', 'mp3',
+    '--progress-template', 'download:%(progress._percent_str)s',
+    url,
+    '-o', `${DOWNLOAD_DIR}/%(title)s.%(ext)s`
+  ]);
+
+  yt.stdout.on('data', (data) => {
+    const match = data.toString().match(/(\d+(\.\d+)?%)/);
+    if (match) {
+      bot.editMessageText(`⬇️ Downloading… ${match[1]}`, {
+        chat_id: chatId,
+        message_id: progressMsgId
+      }).catch(() => {});
+    }
+  });
+
+  yt.on('close', async () => {
+    const files = fs.readdirSync(DOWNLOAD_DIR).filter(f => f.endsWith('.mp3'));
+    if (!files.length) {
+      return bot.editMessageText('❌ Download failed.', {
+        chat_id: chatId,
+        message_id: progressMsgId
+      });
+    }
+
+    const filePath = path.join(DOWNLOAD_DIR, files[0]);
+    await bot.sendAudio(chatId, filePath);
+    fs.unlinkSync(filePath);
+
+    bot.editMessageText('✅ Download complete!', {
+      chat_id: chatId,
+      message_id: progressMsgId
+    });
+  });
+});
+*/
+
+// =====================
+// /PLAY (NO SONG)
+// =====================
+bot.onText(/^\/play$/, (msg) => {
+  const replies = [
+    "🎵 Abe chutiya hai kya, Gana ka naam bhi likhde 😄\nTry: /play jaatta ka chora",
+    "🤔Gana ka naam tera baap likhega kya?\nTry: /play jaatta ka chora",
+    "🎧 Abe anpadh gana ka naam likh chl\nTry: /play jaatta ka chora",
+  ];
+  bot.sendMessage(msg.chat.id, replies[Math.floor(Math.random() * replies.length)]);
+});
+
+
+// =====================
+// ADMIN: /HISTORY
+// =====================
+bot.onText(/\/history/, (msg) => {
+  if (!authorizedUsers.has(msg.from.id)) {
+    return bot.sendMessage(msg.chat.id, '🚫 Admin only.');
+  }
+
+  bot.sendMessage(msg.chat.id, '📜 Which history do you want?', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '🖐 Last 5 songs', callback_data: 'history_5' }],
+        [{ text: '📚 Full history', callback_data: 'history_all' }]
+      ]
+    }
+  });
+});
+bot.on('callback_query', (query) => {
+  const chatId = query.message.chat.id;
+  const userId = query.from.id;
+
+  if (!authorizedUsers.has(userId)) {
+    return bot.sendMessage(chatId, '🚫 Admin only.');
+  }
+
+  if (!fs.existsSync(LOG_FILE)) {
+    return bot.sendMessage(chatId, '📭 No history found.');
+  }
+
+  let lines = fs.readFileSync(LOG_FILE, 'utf8').trim().split('\n');
+
+  if (query.data === 'history_5') {
+    lines = lines.slice(-5);
+  }
+
+  lines = lines.reverse();
+
+  let message = '📜 Download History:\n\n';
+
+  lines.forEach((l, i) => {
+    const [time, user, song] = l.split(' | ');
+    message += `${i + 1}. ${song}\n👤 ${user}\n⏰ ${time}\n\n`;
+  });
+
+  bot.sendMessage(chatId, message);
+});
+
+
+
+// =====================
+// INFO COMMANDS
+// =====================
+bot.onText(/\/about/, (msg) => {
+  bot.sendMessage(msg.chat.id,
+`👨‍💻 About the Developer
+Name: Atul Saharan
+Username: @saharan_atul
+🛠️ Built for learning & experimentation`);
+});
+
+bot.onText(/\/clear/, (msg) => {
+  bot.sendMessage(msg.chat.id,
+'🧹 You can clear chat manually from Telegram settings.');
+});
+
+
+// =====================
+// START
+// =====================
+
+// =====================
+// PLAY COMMAND (DIRECT DOWNLOAD)
+// =====================
+
+bot.onText(/\/play (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const song = match[1]; // ✅ define FIRST
+
+  const username =
+    msg.from.username ||
+    msg.from.first_name ||
+    'unknown_user';
+
+  const time = new Date().toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour12: false
+  });
+
+  // ✅ LOG ENTRY
+  fs.appendFileSync(LOG_FILE, `${time} | ${username} | ${song}\n`);
+
+  const progressMsg = await bot.sendMessage(
+    chatId,
+    `🎵 Downloading: ${song}\n⬇️ 0%`
+  );
+
+  const yt = spawn('yt-dlp', [
+    '-x',
+    '--audio-format', 'mp3',
+    '--progress-template', 'download:%(progress._percent_str)s',
+    `ytsearch1:${song}`,
+    '-o', `${DOWNLOAD_DIR}/%(title)s.%(ext)s`
+  ]);
+
+  yt.stdout.on('data', (data) => {
+    const percent = data.toString().match(/(\d+(\.\d+)?%)/);
+    if (percent) {
+      bot.editMessageText(
+        `🎵 Downloading: ${song}\n⬇️ ${percent[1]}`,
+        { chat_id: chatId, message_id: progressMsg.message_id }
+      ).catch(() => {});
+    }
+  });
+
+  yt.on('close', async () => {
+    const files = fs.readdirSync(DOWNLOAD_DIR).filter(f => f.endsWith('.mp3'));
+    if (!files.length) return;
+
+    const filePath = path.join(DOWNLOAD_DIR, files[0]);
+    await bot.sendAudio(chatId, filePath);
+    fs.unlinkSync(filePath);
+
+    bot.editMessageText('✅ Download complete!', {
+      chat_id: chatId,
+      message_id: progressMsg.message_id
+    });
+  });
+});
+
+
+
+bot.onText(/\/start/, (msg) => {
+  const name = msg.from.first_name || 'Friend';
+  bot.sendMessage(msg.chat.id,
+`🎶 Welcome ${name}!
+
+🤖 JAAT DJ Bot
+🛠️ Built by the JAAT community
+
+▶️ Use:
+/play <songname>
+/about: About the developer
+/auth <password>
+/history: Admin only
+
+⚠️ Personal & experimental bot. Listen to music at your own risk — it may sometimes play vulgar songs. 😂.`);
+});
