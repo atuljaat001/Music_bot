@@ -10,7 +10,7 @@ const path = require('path');
 // CONFIGURATION
 // =====================
 const TOKEN = 'Enter your token here';
-const ADMIN_PASSWORD = 'jaat123';
+const ADMIN_PASSWORD = 'Enter your password here';
 
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 const LOG_FILE = path.join(__dirname, 'downloads.log');
